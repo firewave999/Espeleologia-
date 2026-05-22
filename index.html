@@ -304,6 +304,7 @@
   <h2>Opções</h2>
   <button class="sheet-btn" id="mExportAll">⬇ Exportar backup (todas as fichas .json)</button>
   <button class="sheet-btn" id="mExportOne">📄 Exportar esta ficha (.json)</button>
+  <button class="sheet-btn" id="mExportXlsx">📊 Exportar planilha Excel (.xlsx)</button>
   <button class="sheet-btn" id="mImport">⬆ Importar backup (.json)</button>
   <button class="sheet-btn" id="mPrint">🖨 Imprimir / Salvar em PDF</button>
   <div class="divider"></div>
@@ -323,6 +324,7 @@
   </div>
 </div>
 
+<script src="xlsx.full.min.js"></script>
 <script>
 "use strict";
 
@@ -687,6 +689,52 @@ document.getElementById("mExportOne").onclick=async ()=>{
   download(`bioespeleo_${nm}_${stamp()}.json`, JSON.stringify({type:"bioespeleo_single",version:2,record:cur(),photos},null,2));
   closeSheet("ovMenu","shMenu");
 };
+document.getElementById("mExportXlsx").onclick=()=>{ closeSheet("ovMenu","shMenu"); exportXlsx(); };
+
+async function exportXlsx(){
+  if(typeof XLSX==="undefined"){
+    alert("A biblioteca de planilha ainda não foi carregada. Abra o app uma vez com internet para baixá-la (depois funciona offline).");
+    return;
+  }
+  const headCols=["Caverna","Data","Hora","Coordenadas","Precisão (m)","Altitude (m)"];
+  const fieldRefs=[]; const fieldCols=[];
+  SCHEMA.forEach(sec=>sec.fields.forEach(f=>{
+    fieldRefs.push(f);
+    fieldCols.push(f.type==="photo" ? "Foto: "+f.label : f.label);
+  }));
+  const tailCols=["Observações","Nº fotos","Legendas das fotos"];
+  const cols=[...headCols,...fieldCols,...tailCols];
+  const rows=[cols];
+
+  const ids=Object.keys(records).sort((a,b)=>(records[b].updated||"").localeCompare(records[a].updated||""));
+  for(const id of ids){
+    const r=records[id]; const v=r.values||{};
+    const row=[ v.f_caverna||"", v.f_data||"", v.f_hora||"", v.f_coord||"",
+                (v.f_acc!=null?v.f_acc:""), (v.f_alt!=null?v.f_alt:"") ];
+    const obs=[];
+    fieldRefs.forEach(f=>{
+      const val=v[f.key];
+      if(f.type==="binary"){ row.push(val==="sim"?"Sim":(val==="nao"?"Não":"")); }
+      else if(f.type==="choice"){ let s=val||""; if(f.outro && val==="Outro" && v[f.key+"__outro"]) s+=" ("+v[f.key+"__outro"]+")"; row.push(s); }
+      else if(f.type==="photo"){ row.push(val?"Sim":""); }
+      const o=v[f.key+"__obs"]; if(o) obs.push(f.label+": "+o);
+    });
+    row.push(obs.join(" | "));
+    const ph=r.photos||[]; row.push(ph.length);
+    const caps=[];
+    for(const pid of ph){ try{ const p=await idbGet(pid); if(p&&p.cap) caps.push(p.cap); }catch(e){} }
+    row.push(caps.join(" | "));
+    rows.push(row);
+  }
+
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=cols.map((c,i)=>({ wch: i<6 ? 16 : Math.min(Math.max(c.length+2,12),40) }));
+  ws["!freeze"]={xSplit:0,ySplit:1};
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Fichas");
+  try{ XLSX.writeFile(wb,`bioespeleo_${stamp()}.xlsx`); }
+  catch(e){ alert("Erro ao gerar a planilha: "+e.message); }
+}
 document.getElementById("mImport").onclick=()=>document.getElementById("fileInput").click();
 document.getElementById("fileInput").onchange=(e)=>{
   const file=e.target.files[0]; if(!file) return;

@@ -732,8 +732,14 @@ async function exportXlsx(){
   ws["!freeze"]={xSplit:0,ySplit:1};
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"Fichas");
-  try{ XLSX.writeFile(wb,`bioespeleo_${stamp()}.xlsx`); }
-  catch(e){ alert("Erro ao gerar a planilha: "+e.message); }
+  try{
+    const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`bioespeleo_${stamp()}.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){ alert("Erro ao gerar a planilha: "+e.message); }
 }
 document.getElementById("mImport").onclick=()=>document.getElementById("fileInput").click();
 document.getElementById("fileInput").onchange=(e)=>{
